@@ -64,7 +64,7 @@ function main(N) {
         if(sel[i].typename == "PathItem"){
             var obj = sel[i];
             if (obj.tags.length > 0 && obj.tags[0].name === "BBAccumRotation") {
-                th = rad2deg(obj.tags[0].value);
+                th = -rad2deg(obj.tags[0].value);
             } else {
                 th = 0;
             }
