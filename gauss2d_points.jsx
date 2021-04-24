@@ -4,7 +4,20 @@ var SCRIPT_NAME = 'ConvertToGradient',
     SCRIPT_VERSION = 'v.0.1.1',
     DLG_OPACITY = .96; // UI window opacity. Range 0-1
 
+var COLOR_DEFAULT_RGB = [0,0,0];
+
 function dialogBox() {
+    if (documents.length == 0) {
+        alert(LANG_ERR_DOC);
+        return;
+      }
+    var doc = app.activeDocument;
+    var sel = doc.selection;
+    if(sel.length === 0) {
+        alert('No ellipse selected!');
+        return;
+    }
+
     var dialog = new Window('dialog', SCRIPT_NAME + ' ' + SCRIPT_VERSION);
     dialog.preferredSize.width = 174;
     dialog.orientation = 'column';
@@ -14,44 +27,54 @@ function dialogBox() {
     // Value fields
     var nPointsPanel = dialog.add('panel', undefined, 'Number of points');
       nPointsPanel.alignChildren = ['fill', 'fill'];
-    var gNumPoints = nPointsPanel.add('edittext', undefined, '10');
+    var gNumPoints = nPointsPanel.add('edittext', undefined, '250');
       gNumPoints.active = true;
+    var gScalePanel = dialog.add('panel', undefined, 'Scale (std. devs)');
+      gScalePanel.alignChildren = ['fill', 'fill'];
+    var gZScale = gScalePanel.add('edittext', undefined, '2');
+      gZScale.active = true;
 
     // Buttons
     var btns = dialog.add('group');
       btns.alignChildren = ['fill', 'fill'];
       btns.orientation = 'column';
-    var cancel = btns.add('button', undefined, 'Cancel', { name: 'cancel' });
-      cancel.helpTip = 'Press Esc to Close';
+    // var preview = btns.add('button', undefined, 'Preview', { name: 'preview' });
+    //   preview.helpTip = 'Preview';
     var ok = btns.add('button', undefined, 'OK', { name: 'ok' });
       ok.helpTip = 'Press Enter to Run';
+    var cancel = btns.add('button', undefined, 'Cancel', { name: 'cancel' });
+      cancel.helpTip = 'Press Esc to Close';
 
-    ok.onClick = function () {
-        if (isNaN(Number(gNumPoints.text))) {
-            alert('Number of points: \nPlease enter a numeric value.');
-            return;
-        } else if (gNumPoints.text === null) {
-            return;
-        } else {
-            numPoints = Number(gNumPoints.text);
-        }
-
-        main(numPoints);
-        dialog.close();
-    }
-
+    ok.onClick = function () { run(dialog, gNumPoints, gZScale); }
     cancel.onClick = function () { dialog.close(); }
 
     dialog.center();
     dialog.show();
 }
 
-function main(N) {
-  if (documents.length == 0) {
-    alert(LANG_ERR_DOC);
-    return;
-  }
-  
+function run(dialog, gNumPoints, gZScale) {
+    if (isNaN(Number(gNumPoints.text))) {
+        alert('Number of points: \nPlease enter a numeric value.');
+        return;
+    } else if (gNumPoints.text === null) {
+        return;
+    } else {
+        numPoints = Number(gNumPoints.text);
+    }
+    if (isNaN(Number(gZScale.text))) {
+        alert('Number of points: \nPlease enter a numeric value.');
+        return;
+    } else if (gZScale.text === null) {
+        return;
+    } else {
+        zScale = Number(gZScale.text);
+    }
+
+    main(numPoints, zScale);
+    dialog.close();
+}
+
+function main(N, zScale) {  
     var doc = app.activeDocument;
     var sel = doc.selection; 
     var rad = 1; // radius of circles
@@ -81,16 +104,24 @@ function main(N) {
 
     // find parameters of 2D gaussian
     var R = rotationMatrix2D(deg2rad(th));
-    var S = [widths[0]/4, heights[0]/4];
+    var S = [widths[0]/(2*zScale), heights[0]/(2*zScale)];
 
     var nse;
-    var group = activeDocument.groupItems.add();
     var point;
     for(var i = 0; i < N; i++){
         nse = randn2D(S, R);
         point = drawPoint(doc, mu[0]+nse[0], mu[1]+nse[1], rad);
-        point.moveToEnd(group);
+        point.fillColor = makeColorRGB(COLOR_DEFAULT_RGB);
+        point.stroked = false;
     }
+}
+
+function makeColorRGB(rgb){
+    var c = new RGBColor();
+    c.red   = rgb[0];
+    c.green = rgb[1];
+    c.blue  = rgb[2];
+    return c;
 }
 
 function rad2deg(n) {
@@ -118,7 +149,6 @@ function dotProduct(vector1, vector2) {
   return result;
 }
 
-
 function randn2D(S, R) {
 // 2D Gaussian w/ eigenvalues S, rotated by rotation matrix R
     var u1 = randn_bm();
@@ -135,5 +165,4 @@ function randn_bm() {
     return Math.sqrt( -2.0 * Math.log( u ) ) * Math.cos( 2.0 * Math.PI * v );
 }
 
-// dialog();
-main(250);
+dialogBox();
