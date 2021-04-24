@@ -1,12 +1,13 @@
 
 // Global variables
-var SCRIPT_NAME = 'ConvertToGradient',
-    SCRIPT_VERSION = 'v.0.1.1',
+var SCRIPT_NAME = '2D Gaussian Samples',
+    SCRIPT_VERSION = 'v.0.1',
     DLG_OPACITY = .96; // UI window opacity. Range 0-1
 
 var COLOR_DEFAULT_RGB = [0,0,0];
 
 function dialogBox() {
+    // init, and early sanity checking
     if (documents.length == 0) {
         alert(LANG_ERR_DOC);
         return;
@@ -14,10 +15,14 @@ function dialogBox() {
     var doc = app.activeDocument;
     var sel = doc.selection;
     if(sel.length === 0) {
-        alert('No ellipse selected!');
+        alert('No object selected!');
+        return;
+    } else if(sel.length > 1) {
+        alert('More than one object selected!');
         return;
     }
 
+    // create dialog
     var dialog = new Window('dialog', SCRIPT_NAME + ' ' + SCRIPT_VERSION);
     dialog.preferredSize.width = 174;
     dialog.orientation = 'column';
@@ -25,6 +30,11 @@ function dialogBox() {
     dialog.opacity = DLG_OPACITY;
 
     // Value fields
+    var radiusPanel = dialog.add('panel', undefined, 'Point size');
+      radiusPanel.alignChildren = ['fill', 'fill'];
+    var gRadius = radiusPanel.add('edittext', undefined, '0.5');
+      gRadius.active = true;
+
     var nPointsPanel = dialog.add('panel', undefined, 'Number of points');
       nPointsPanel.alignChildren = ['fill', 'fill'];
     var gNumPoints = nPointsPanel.add('edittext', undefined, '250');
@@ -38,21 +48,39 @@ function dialogBox() {
     var btns = dialog.add('group');
       btns.alignChildren = ['fill', 'fill'];
       btns.orientation = 'column';
-    // var preview = btns.add('button', undefined, 'Preview', { name: 'preview' });
-    //   preview.helpTip = 'Preview';
+    var generate = btns.add('button', undefined, 'Generate', { name: 'generate' });
+      generate.helpTip = 'Generate';
     var ok = btns.add('button', undefined, 'OK', { name: 'ok' });
       ok.helpTip = 'Press Enter to Run';
     var cancel = btns.add('button', undefined, 'Cancel', { name: 'cancel' });
       cancel.helpTip = 'Press Esc to Close';
 
-    ok.onClick = function () { run(dialog, gNumPoints, gZScale); }
-    cancel.onClick = function () { dialog.close(); }
+    // button handles
+    var points = [];
+    generate.onClick = function () { points = run(dialog, gNumPoints, gZScale, gRadius, points); }
+    ok.onClick = function () { if (points.length === 0) { points = run(dialog, gNumPoints, gZScale, gRadius, points); } dialog.close(); }
+    cancel.onClick = function () { undoPoints(points); dialog.close(); }
 
     dialog.center();
     dialog.show();
 }
 
-function run(dialog, gNumPoints, gZScale) {
+function undoPoints(points) {
+    if (points.length > 0) {
+        app.undo(); return;
+    }
+}
+
+function run(dialog, gNumPoints, gZScale, gRadius, points) {
+    // check values are valid
+    if (isNaN(Number(gRadius.text))) {
+        alert('Number of points: \nPlease enter a numeric value.');
+        return;
+    } else if (gRadius.text === null) {
+        return;
+    } else {
+        pointRadius = Number(gRadius.text);
+    }
     if (isNaN(Number(gNumPoints.text))) {
         alert('Number of points: \nPlease enter a numeric value.');
         return;
@@ -70,53 +98,67 @@ function run(dialog, gNumPoints, gZScale) {
         zScale = Number(gZScale.text);
     }
 
-    main(numPoints, zScale);
-    dialog.close();
+    // if any points were already created, undo
+    undoPoints(points);
+    // create new points
+    var points = main(numPoints, zScale, pointRadius);
+    // sync with illustrator
+    app.redraw();
+    return points;
 }
 
-function main(N, zScale) {  
+function main(N, zScale, pointRadius) {  
     var doc = app.activeDocument;
     var sel = doc.selection; 
-    var rad = 1; // radius of circles
+    
     var th; // rotation of ellipse
+    var mu; // center of ellipse
+    var width; // width of ellipse
+    var height; // height of ellipse
 
-    var mu;
-    var widths = [];
-    var heights = [];
     for(var i = 0; i < sel.length; i++){ // only get first one
         if(sel[i].typename == "PathItem"){
             var obj = sel[i];
+
+            // get orientation of ellipse
             if (obj.tags.length > 0 && obj.tags[0].name === "BBAccumRotation") {
                 th = -rad2deg(obj.tags[0].value);
             } else {
                 th = 0;
             }
 
+            // rotate ellipse, get its height and width, then unrotate
             obj.rotate(th);
             mu = obj.position;
             mu[0] += obj.width/2.0;
             mu[1] -= obj.height/2.0;
-            widths.push(obj.width);
-            heights.push(obj.height);
+            width = obj.width;
+            height = obj.height;
             obj.rotate(-th);
         }
     }
 
-    // find parameters of 2D gaussian
+    // find parameters of 2D gaussian (as scale and rotation)
     var R = rotationMatrix2D(deg2rad(th));
-    var S = [widths[0]/(2*zScale), heights[0]/(2*zScale)];
+    var S = [width/(2*zScale), height/(2*zScale)];
 
+    // generate N points with given covariance
     var nse;
-    var point;
+    var points = [];
+    var newGroup = app.activeDocument.groupItems.add();
     for(var i = 0; i < N; i++){
         nse = randn2D(S, R);
-        point = drawPoint(doc, mu[0]+nse[0], mu[1]+nse[1], rad);
+        var point = drawPoint(doc, mu[0]+nse[0], mu[1]+nse[1], pointRadius);
         point.fillColor = makeColorRGB(COLOR_DEFAULT_RGB);
         point.stroked = false;
+        point.moveToBeginning(newGroup);
+        points.push(point);
     }
+    return points;
 }
 
 function makeColorRGB(rgb){
+// RGB color constructor
     var c = new RGBColor();
     c.red   = rgb[0];
     c.green = rgb[1];
@@ -125,26 +167,30 @@ function makeColorRGB(rgb){
 }
 
 function rad2deg(n) {
+// convert degrees to radians
   return n * (180 / Math.PI);
 }
 
 function deg2rad(n) {
+// convert radians to degrees
   return n * (Math.PI / 180);
 }
 
 function drawPoint(doc, px, py, rad) {
+// draw circle at position (px,py) with radius rad
     return doc.pathItems.ellipse(py+rad, px-rad, 2*rad, 2*rad, false, false);
 }
 
 function rotationMatrix2D(th) {
+// 2D rotation matrix with angle th (radians)
     return [[Math.cos(th), Math.sin(th)], [-Math.sin(th), Math.cos(th)]];
 }
 
-// dot product
-function dotProduct(vector1, vector2) {
+function dotProduct(x, y) {
+// dot product of x and y
   var result = 0;
-  for (var i = 0; i < vector1.length; i++) {
-    result += vector1[i] * vector2[i];
+  for (var i = 0; i < x.length; i++) {
+    result += x[i] * y[i];
   }
   return result;
 }
