@@ -1,3 +1,6 @@
+// Gauss2DSamples.jsx
+// Version 0.1
+// Copyright 2021 Jay Hennig
 
 // Global variables
 var SCRIPT_NAME = '2D Gaussian Samples',
