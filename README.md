@@ -5,6 +5,12 @@ Generates points from a 2D Gaussian using the selected ellipse to define the cov
 
 <img src="gifs/Gauss2DSamples.gif" width="350px;"/>
 
+## ConnectAllNodes
+
+Connects the centroids of each pair highlighted objects that have a different X (or Y) value. (Useful for drawing network schematics where all nodes in different columns should be connected.)
+
+<img src="gifs/ConnectAllNodes.gif" width="350px;"/>
+
 ## How to install/run a script
 
 There are three options for running scripts in Illustrator.
