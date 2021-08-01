@@ -12,7 +12,7 @@ var COLOR_DEFAULT_RGB = [0,0,0];
 function dialogBox() {
     // init, and early sanity checking
     if (documents.length == 0) {
-        alert(LANG_ERR_DOC);
+        alert('Please open a document first.');
         return;
       }
     var doc = app.activeDocument;
